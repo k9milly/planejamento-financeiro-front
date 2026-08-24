@@ -1,5 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  CalendarClock,
+  Heart,
   LayoutDashboard,
   ReceiptText,
   Table2,
@@ -17,6 +19,8 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/lancamentos", label: "Lançamentos", icon: ReceiptText },
+  { to: "/gastos-fixos", label: "Gastos Fixos", icon: CalendarClock },
+  { to: "/wishlist", label: "Wishlist", icon: Heart },
   { to: "/tabela-dinamica", label: "Tabela Dinâmica", icon: Table2 },
   { to: "/metas", label: "Metas & Orçamentos", icon: Target },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
@@ -126,11 +130,7 @@ export function AppShell({
       <div className="lg:pl-64">
         <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
           <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
-            <button
-              className="lg:hidden"
-              aria-label="Abrir menu"
-              onClick={() => setOpen(true)}
-            >
+            <button className="lg:hidden" aria-label="Abrir menu" onClick={() => setOpen(true)}>
               <Menu size={22} />
             </button>
             <div className="mr-auto">

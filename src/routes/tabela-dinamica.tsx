@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
 import { AppShell } from "@/components/finance/AppShell";
+import { useCategories } from "@/components/finance/categories-context";
 import { usePeriod } from "@/components/finance/period-context";
 import { useTransactions } from "@/components/finance/transactions-context";
-import { CATEGORIES, MONTHS, formatBRL, getMonth, type TxType } from "@/lib/finance-data";
+import { MONTHS, formatBRL, getMonth } from "@/lib/finance-data";
 
 export const Route = createFileRoute("/tabela-dinamica")({
   head: () => ({
@@ -25,46 +25,37 @@ export const Route = createFileRoute("/tabela-dinamica")({
 
 function PivotPage() {
   const { items } = useTransactions();
+  const { items: categorias } = useCategories();
   const { year } = usePeriod();
-  const [kind, setKind] = useState<TxType>("despesa");
 
-  const rows = CATEGORIES.map((category) => {
-    const values = MONTHS.map((_, i) =>
-      items
-        .filter(
-          (t) =>
-            t.category === category &&
-            t.type === kind &&
-            Number(t.date.slice(0, 4)) === year &&
-            getMonth(t) === i + 1,
-        )
-        .reduce((a, t) => a + t.amount, 0),
-    );
-    const total = values.reduce((a, b) => a + b, 0);
-    const active = values.filter((v) => v > 0).length;
-    return { category, values, total, average: active ? total / active : 0 };
-  }).filter((r) => r.total > 0);
+  // Só saída tem categoria neste domínio (guardado, retirado, rendimento,
+  // perda e transferência não têm — ver Lançamentos), então a tabela
+  // dinâmica é sempre sobre saídas; não há mais o que escolher aqui.
+  const rows = categorias
+    .map((categoria) => {
+      const values = MONTHS.map((_, i) =>
+        items
+          .filter(
+            (t) =>
+              t.categoriaId === categoria.id &&
+              t.tipo === "saida" &&
+              Number(t.data.slice(0, 4)) === year &&
+              getMonth(t) === i + 1,
+          )
+          .reduce((a, t) => a + t.valor, 0),
+      );
+      const total = values.reduce((a, b) => a + b, 0);
+      const active = values.filter((v) => v > 0).length;
+      return { category: categoria.nome, values, total, average: active ? total / active : 0 };
+    })
+    .filter((r) => r.total > 0);
 
   const columnTotals = MONTHS.map((_, i) => rows.reduce((a, r) => a + (r.values[i] ?? 0), 0));
   const grandTotal = rows.reduce((a, r) => a + r.total, 0);
   const max = Math.max(...rows.flatMap((r) => r.values), 1);
 
   return (
-    <AppShell
-      title="Tabela Dinâmica"
-      subtitle={`Categorias x Meses • ${year}`}
-      actions={
-        <select
-          aria-label="Tipo de análise"
-          className="h-9 rounded-lg border border-border bg-surface-2 px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as TxType)}
-        >
-          <option value="despesa">Saídas</option>
-          <option value="receita">Entradas</option>
-        </select>
-      }
-    >
+    <AppShell title="Tabela Dinâmica" subtitle={`Saídas por categoria x mês • ${year}`}>
       <div className="panel overflow-x-auto">
         <table className="w-full min-w-[1000px] border-collapse text-sm">
           <thead>
@@ -102,7 +93,7 @@ function PivotPage() {
                     style={
                       v > 0
                         ? {
-                            background: `color-mix(in oklab, var(--${kind === "despesa" ? "expense" : "income"}) ${Math.round((v / max) * 22)}%, transparent)`,
+                            background: `color-mix(in oklab, var(--expense) ${Math.round((v / max) * 22)}%, transparent)`,
                           }
                         : undefined
                     }

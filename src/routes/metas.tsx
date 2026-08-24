@@ -3,7 +3,7 @@ import { Target, Wallet } from "lucide-react";
 import { AppShell } from "@/components/finance/AppShell";
 import { usePeriod } from "@/components/finance/period-context";
 import { useTransactions } from "@/components/finance/transactions-context";
-import { MONTHS, budgets, formatBRL, getMonth, goals } from "@/lib/finance-data";
+import { MONTHS, budgets, categoriaPorNome, formatBRL, getMonth, goals } from "@/lib/finance-data";
 
 export const Route = createFileRoute("/metas")({
   head: () => ({
@@ -24,11 +24,13 @@ export const Route = createFileRoute("/metas")({
 });
 
 function Bar({ percent, tone }: { percent: number; tone: "income" | "expense" | "primary" }) {
-  const bg =
-    tone === "income" ? "bg-income" : tone === "expense" ? "bg-expense" : "bg-primary";
+  const bg = tone === "income" ? "bg-income" : tone === "expense" ? "bg-expense" : "bg-primary";
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-      <div className={`h-full rounded-full ${bg}`} style={{ width: `${Math.min(percent, 100)}%` }} />
+      <div
+        className={`h-full rounded-full ${bg}`}
+        style={{ width: `${Math.min(percent, 100)}%` }}
+      />
     </div>
   );
 }
@@ -37,16 +39,18 @@ function MetasPage() {
   const { items } = useTransactions();
   const { month, year } = usePeriod();
 
-  const spent = (category: string) =>
-    items
+  const spent = (category: string) => {
+    const categoriaId = categoriaPorNome(category)?.id;
+    return items
       .filter(
         (t) =>
-          t.category === category &&
-          t.type === "despesa" &&
-          Number(t.date.slice(0, 4)) === year &&
+          t.categoriaId === categoriaId &&
+          t.tipo === "saida" &&
+          Number(t.data.slice(0, 4)) === year &&
           (month === 0 || getMonth(t) === month),
       )
-      .reduce((a, t) => a + t.amount, 0);
+      .reduce((a, t) => a + t.valor, 0);
+  };
 
   return (
     <AppShell

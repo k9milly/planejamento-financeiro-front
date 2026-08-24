@@ -14,12 +14,15 @@ import {
   YAxis,
   ComposedChart,
 } from "recharts";
-import { ArrowDownRight, ArrowUpRight, PiggyBank, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CreditCard, PiggyBank, Wallet } from "lucide-react";
 import { AppShell } from "@/components/finance/AppShell";
+import { CalendarioVencimentos } from "@/components/finance/CalendarioVencimentos";
 import { KpiCard } from "@/components/finance/KpiCard";
+import { useAccounts } from "@/components/finance/accounts-context";
+import { useCategories } from "@/components/finance/categories-context";
 import { usePeriod } from "@/components/finance/period-context";
 import { useTransactions } from "@/components/finance/transactions-context";
-import { MONTHS, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
+import { MONTHS, categoriaPorId, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -33,7 +36,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Dashboard | Planejamento Financeiro" },
       {
         property: "og:description",
-        content: "Acompanhe KPIs, evolução mensal e distribuição de gastos por categoria.",
+        content: "Acompanhe KPIs, contas, calendário e distribuição de gastos por categoria.",
       },
     ],
   }),
@@ -51,41 +54,47 @@ const DONUT_COLORS = [
 
 function Dashboard() {
   const { items } = useTransactions();
+  const { items: accounts } = useAccounts();
+  const { items: categorias } = useCategories();
   const { month, year } = usePeriod();
 
   const inPeriod = items.filter(
-    (t) => Number(t.date.slice(0, 4)) === year && (month === 0 || getMonth(t) === month),
+    (t) => Number(t.data.slice(0, 4)) === year && (month === 0 || getMonth(t) === month),
   );
 
-  const income = inPeriod.filter((t) => t.type === "receita").reduce((a, t) => a + t.amount, 0);
-  const expense = inPeriod.filter((t) => t.type === "despesa").reduce((a, t) => a + t.amount, 0);
+  // Simplificação de mock (igual à de Lançamentos): só entrada/saída contam
+  // nos KPIs de fluxo — guardado, retirado, rendimento, perda e
+  // transferência dependem de conta/destino, e ficam para a integração real.
+  const income = inPeriod.filter((t) => t.tipo === "entrada").reduce((a, t) => a + t.valor, 0);
+  const expense = inPeriod.filter((t) => t.tipo === "saida").reduce((a, t) => a + t.valor, 0);
   const savingRate = income > 0 ? ((income - expense) / income) * 100 : 0;
 
   const totalBalance = items
-    .filter((t) => Number(t.date.slice(0, 4)) === year)
-    .reduce((a, t) => a + (t.type === "receita" ? t.amount : -t.amount), 0);
+    .filter((t) => Number(t.data.slice(0, 4)) === year)
+    .reduce((a, t) => a + (t.tipo === "entrada" ? t.valor : t.tipo === "saida" ? -t.valor : 0), 0);
 
   const monthly = MONTHS.map((label, i) => {
-    const rows = items.filter(
-      (t) => Number(t.date.slice(0, 4)) === year && getMonth(t) === i + 1,
-    );
-    const e = rows.filter((t) => t.type === "receita").reduce((a, t) => a + t.amount, 0);
-    const s = rows.filter((t) => t.type === "despesa").reduce((a, t) => a + t.amount, 0);
+    const rows = items.filter((t) => Number(t.data.slice(0, 4)) === year && getMonth(t) === i + 1);
+    const e = rows.filter((t) => t.tipo === "entrada").reduce((a, t) => a + t.valor, 0);
+    const s = rows.filter((t) => t.tipo === "saida").reduce((a, t) => a + t.valor, 0);
     return { mes: label, Entradas: e, Saídas: s, Saldo: e - s };
   }).filter((m) => m.Entradas > 0 || m["Saídas"] > 0);
 
   const byCategory = Object.entries(
     inPeriod
-      .filter((t) => t.type === "despesa")
+      .filter((t) => t.tipo === "saida")
       .reduce<Record<string, number>>((acc, t) => {
-        acc[t.category] = (acc[t.category] ?? 0) + t.amount;
+        const nome = categoriaPorId(t.categoriaId)?.nome ?? "Sem categoria";
+        acc[nome] = (acc[nome] ?? 0) + t.valor;
         return acc;
       }, {}),
   )
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
-  const recent = [...inPeriod].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+  const recent = [...inPeriod].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 6);
+
+  const mesCalendario = month === 0 ? null : month;
 
   return (
     <AppShell
@@ -111,14 +120,14 @@ function Dashboard() {
         <KpiCard
           label="Entradas do Período"
           value={formatBRL(income)}
-          hint={`${inPeriod.filter((t) => t.type === "receita").length} lançamentos`}
+          hint={`${inPeriod.filter((t) => t.tipo === "entrada").length} lançamentos`}
           icon={ArrowUpRight}
           tone="income"
         />
         <KpiCard
           label="Saídas do Período"
           value={formatBRL(expense)}
-          hint={`${inPeriod.filter((t) => t.type === "despesa").length} lançamentos`}
+          hint={`${inPeriod.filter((t) => t.tipo === "saida").length} lançamentos`}
           icon={ArrowDownRight}
           tone="expense"
         />
@@ -130,6 +139,57 @@ function Dashboard() {
           tone={savingRate >= 20 ? "income" : "expense"}
         />
       </div>
+
+      {/* Saldo inteligente: fatura em aberto (dívida) nunca soma com saldo
+          disponível — cada card mostra só a métrica certa para o tipo da
+          conta, com a cor de despesa/receita reforçando a diferença. */}
+      <section className="panel mt-6 p-5">
+        <header className="mb-4">
+          <h2 className="text-base font-semibold">Contas</h2>
+          <p className="text-xs text-muted-foreground">
+            Saldo disponível nas contas correntes; fatura em aberto nos cartões — nunca somados.
+          </p>
+        </header>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {accounts.map((conta) => (
+            <div
+              key={conta.id}
+              className="surface-2 rounded-xl border border-border bg-surface-2 p-4"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex size-8 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: `${conta.cor}26`, color: conta.cor }}
+                >
+                  {conta.tipo === "cartao_credito" ? (
+                    <CreditCard size={15} />
+                  ) : (
+                    <Wallet size={15} />
+                  )}
+                </span>
+                <p className="truncate text-sm font-medium">{conta.nome}</p>
+              </div>
+              {conta.tipo === "cartao_credito" ? (
+                <>
+                  <p className="mt-3 text-xl font-semibold tabular-nums text-expense">
+                    {formatBRL(conta.faturaEmAberto ?? 0)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    fatura em aberto • vence dia {conta.diaVencimentoFatura}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-3 text-xl font-semibold tabular-nums text-income">
+                    {formatBRL(conta.saldo)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">saldo disponível</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-3">
         <section className="panel p-5 xl:col-span-2">
@@ -171,7 +231,13 @@ function Dashboard() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Entradas" fill="var(--income)" radius={[6, 6, 0, 0]} barSize={18} />
                 <Bar dataKey="Saídas" fill="var(--expense)" radius={[6, 6, 0, 0]} barSize={18} />
-                <Line type="monotone" dataKey="Saldo" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
+                <Line
+                  type="monotone"
+                  dataKey="Saldo"
+                  stroke="var(--primary)"
+                  strokeWidth={2.5}
+                  dot={false}
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -195,7 +261,13 @@ function Dashboard() {
                   stroke="none"
                 >
                   {byCategory.map((entry, i) => (
-                    <Cell key={entry.name} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                    <Cell
+                      key={entry.name}
+                      fill={
+                        categorias.find((c) => c.nome === entry.name)?.cor ??
+                        DONUT_COLORS[i % DONUT_COLORS.length]
+                      }
+                    />
                   ))}
                 </Pie>
                 <Tooltip
@@ -215,7 +287,11 @@ function Dashboard() {
               <li key={c.name} className="flex items-center gap-2 text-sm">
                 <span
                   className="size-2.5 rounded-full"
-                  style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }}
+                  style={{
+                    background:
+                      categorias.find((cat) => cat.nome === c.name)?.cor ??
+                      DONUT_COLORS[i % DONUT_COLORS.length],
+                  }}
                 />
                 <span className="text-muted-foreground">{c.name}</span>
                 <span className="ml-auto tabular-nums">{formatBRL(c.value)}</span>
@@ -225,23 +301,38 @@ function Dashboard() {
         </section>
       </div>
 
-      <section className="panel mt-6 p-5">
-        <h2 className="mb-4 text-base font-semibold">Lançamentos recentes</h2>
-        <ul className="divide-y divide-border">
-          {recent.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 py-3 text-sm">
-              <span className="w-20 shrink-0 text-muted-foreground">{formatDate(t.date)}</span>
-              <span className="min-w-0 flex-1 truncate">{t.description}</span>
-              <span className="hidden text-muted-foreground sm:block">{t.category}</span>
-              <span
-                className={`w-32 text-right tabular-nums ${t.type === "receita" ? "text-income" : "text-expense"}`}
-              >
-                {t.type === "receita" ? "+" : "−"} {formatBRL(t.amount)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="mt-6 grid gap-4 xl:grid-cols-3">
+        <section className="panel p-5 xl:col-span-2">
+          <h2 className="mb-4 text-base font-semibold">Lançamentos recentes</h2>
+          <ul className="divide-y divide-border">
+            {recent.map((t) => (
+              <li key={t.id} className="flex items-center gap-3 py-3 text-sm">
+                <span className="w-20 shrink-0 text-muted-foreground">{formatDate(t.data)}</span>
+                <span className="min-w-0 flex-1 truncate">{t.descricao}</span>
+                <span className="hidden text-muted-foreground sm:block">
+                  {categoriaPorId(t.categoriaId)?.nome ?? "—"}
+                </span>
+                <span
+                  className={`w-32 text-right tabular-nums ${t.tipo === "entrada" ? "text-income" : t.tipo === "saida" ? "text-expense" : ""}`}
+                >
+                  {t.tipo === "entrada" ? "+" : t.tipo === "saida" ? "−" : ""} {formatBRL(t.valor)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="panel p-5">
+          <h2 className="mb-4 text-base font-semibold">Calendário de Vencimentos</h2>
+          {mesCalendario ? (
+            <CalendarioVencimentos year={year} month={mesCalendario} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Escolha um mês específico no filtro do cabeçalho para ver o calendário.
+            </p>
+          )}
+        </section>
+      </div>
     </AppShell>
   );
 }

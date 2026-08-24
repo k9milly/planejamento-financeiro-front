@@ -4,7 +4,7 @@ import { ArrowDownRight, ArrowLeft, ArrowUpRight, PiggyBank, Wallet } from "luci
 import { AppShell } from "@/components/finance/AppShell";
 import { KpiCard } from "@/components/finance/KpiCard";
 import { useTransactions } from "@/components/finance/transactions-context";
-import { MONTHS, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
+import { categoriaPorId, MONTHS, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/mes/$ano/$mes")({
@@ -36,22 +36,22 @@ function MonthDetail() {
   const rows = useMemo(
     () =>
       items
-        .filter((t) => Number(t.date.slice(0, 4)) === year && getMonth(t) === month)
-        .sort((a, b) => b.date.localeCompare(a.date)),
+        .filter((t) => Number(t.data.slice(0, 4)) === year && getMonth(t) === month)
+        .sort((a, b) => b.data.localeCompare(a.data)),
     [items, year, month],
   );
 
-  const income = rows.filter((t) => t.type === "receita").reduce((a, t) => a + t.amount, 0);
-  const expense = rows.filter((t) => t.type === "despesa").reduce((a, t) => a + t.amount, 0);
+  const income = rows.filter((t) => t.tipo === "entrada").reduce((a, t) => a + t.valor, 0);
+  const expense = rows.filter((t) => t.tipo === "saida").reduce((a, t) => a + t.valor, 0);
   const balance = income - expense;
   const savingRate = income > 0 ? ((income - expense) / income) * 100 : 0;
-  const pending = rows.filter((t) => t.status === "pendente");
 
   const byCategory = Object.entries(
     rows
-      .filter((t) => t.type === "despesa")
+      .filter((t) => t.tipo === "saida")
       .reduce<Record<string, number>>((acc, t) => {
-        acc[t.category] = (acc[t.category] ?? 0) + t.amount;
+        const nome = categoriaPorId(t.categoriaId)?.nome ?? "Sem categoria";
+        acc[nome] = (acc[nome] ?? 0) + t.valor;
         return acc;
       }, {}),
   )
@@ -91,21 +91,21 @@ function MonthDetail() {
         <KpiCard
           label="Entradas"
           value={formatBRL(income)}
-          hint={`${rows.filter((t) => t.type === "receita").length} lançamentos`}
+          hint={`${rows.filter((t) => t.tipo === "entrada").length} lançamentos`}
           icon={ArrowUpRight}
           tone="income"
         />
         <KpiCard
           label="Saídas"
           value={formatBRL(expense)}
-          hint={`${rows.filter((t) => t.type === "despesa").length} lançamentos`}
+          hint={`${rows.filter((t) => t.tipo === "saida").length} lançamentos`}
           icon={ArrowDownRight}
           tone="expense"
         />
         <KpiCard
           label="Taxa de Poupança"
           value={`${savingRate.toFixed(1)}%`}
-          hint={pending.length ? `${pending.length} pendente(s)` : "Tudo pago"}
+          hint={savingRate >= 20 ? "Acima da meta de 20%" : "Abaixo da meta de 20%"}
           icon={PiggyBank}
           tone={savingRate >= 20 ? "income" : "expense"}
         />
@@ -143,36 +143,29 @@ function MonthDetail() {
                 <th className="border-b border-border px-4 py-3 font-medium">Descrição</th>
                 <th className="border-b border-border px-4 py-3 font-medium">Categoria</th>
                 <th className="border-b border-border px-4 py-3 text-right font-medium">Valor</th>
-                <th className="border-b border-border px-4 py-3 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((t) => (
                 <tr key={t.id} className="transition-colors hover:bg-accent/40">
                   <td className="border-b border-border px-4 py-3 text-muted-foreground">
-                    {formatDate(t.date)}
+                    {formatDate(t.data)}
                   </td>
-                  <td className="border-b border-border px-4 py-3">{t.description}</td>
+                  <td className="border-b border-border px-4 py-3">{t.descricao}</td>
                   <td className="border-b border-border px-4 py-3 text-muted-foreground">
-                    {t.category}
+                    {categoriaPorId(t.categoriaId)?.nome ?? "—"}
                   </td>
                   <td
-                    className={`border-b border-border px-4 py-3 text-right tabular-nums ${t.type === "receita" ? "text-income" : "text-expense"}`}
+                    className={`border-b border-border px-4 py-3 text-right tabular-nums ${t.tipo === "entrada" ? "text-income" : t.tipo === "saida" ? "text-expense" : ""}`}
                   >
-                    {t.type === "receita" ? "+" : "−"} {formatBRL(t.amount)}
-                  </td>
-                  <td className="border-b border-border px-4 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs ${t.status === "pago" ? "bg-accent text-accent-foreground" : "bg-surface-2 text-muted-foreground"}`}
-                    >
-                      {t.status === "pago" ? "Pago" : "Pendente"}
-                    </span>
+                    {t.tipo === "entrada" ? "+" : t.tipo === "saida" ? "−" : ""}{" "}
+                    {formatBRL(t.valor)}
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
                     Nenhum lançamento em {label}.
                   </td>
                 </tr>

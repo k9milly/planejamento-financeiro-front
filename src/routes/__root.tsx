@@ -11,10 +11,13 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AccountsProvider } from "@/components/finance/accounts-context";
+import { CategoriesProvider } from "@/components/finance/categories-context";
+import { GastosFixosProvider } from "@/components/finance/gastos-fixos-context";
 import { PeriodProvider } from "@/components/finance/period-context";
 import { TransactionsProvider } from "@/components/finance/transactions-context";
+import { WishlistProvider } from "@/components/finance/wishlist-context";
 import { Toaster } from "@/components/ui/sonner";
-
 
 function NotFoundComponent() {
   return (
@@ -84,8 +87,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Planejamento Financeiro" },
       {
         name: "description",
-        content:
-          "Dashboard de planejamento financeiro pessoal com lançamentos, análises e metas.",
+        content: "Dashboard de planejamento financeiro pessoal com lançamentos, análises e metas.",
       },
       { property: "og:title", content: "Planejamento Financeiro" },
       {
@@ -130,13 +132,20 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <PeriodProvider>
-        <TransactionsProvider>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-          <Toaster />
-        </TransactionsProvider>
+        <AccountsProvider>
+          <CategoriesProvider>
+            <TransactionsProvider>
+              <GastosFixosProvider>
+                <WishlistProvider>
+                  {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+                  <Outlet />
+                  <Toaster />
+                </WishlistProvider>
+              </GastosFixosProvider>
+            </TransactionsProvider>
+          </CategoriesProvider>
+        </AccountsProvider>
       </PeriodProvider>
     </QueryClientProvider>
   );
-
 }

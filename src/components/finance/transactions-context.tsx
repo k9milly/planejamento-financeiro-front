@@ -1,22 +1,22 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { transactions as seed, type Transaction } from "@/lib/finance-data";
+import { transactions as seed, type Lancamento } from "@/lib/finance-data";
 
 interface Store {
-  items: Transaction[];
-  add: (tx: Omit<Transaction, "id">) => void;
-  update: (id: string, tx: Omit<Transaction, "id">) => void;
+  items: Lancamento[];
+  add: (tx: Omit<Lancamento, "id">) => void;
+  update: (id: string, tx: Omit<Lancamento, "id">) => void;
   remove: (id: string) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
 
 export function TransactionsProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<Transaction[]>(seed);
+  const [items, setItems] = useState<Lancamento[]>(seed);
 
-  const add = useCallback((tx: Omit<Transaction, "id">) => {
+  const add = useCallback((tx: Omit<Lancamento, "id">) => {
     setItems((prev) => [{ ...tx, id: `new-${Date.now()}` }, ...prev]);
   }, []);
-  const update = useCallback((id: string, tx: Omit<Transaction, "id">) => {
+  const update = useCallback((id: string, tx: Omit<Lancamento, "id">) => {
     setItems((prev) => prev.map((t) => (t.id === id ? { ...tx, id } : t)));
   }, []);
   const remove = useCallback((id: string) => {

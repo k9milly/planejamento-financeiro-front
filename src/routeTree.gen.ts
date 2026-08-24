@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as GastosFixosRouteImport } from './routes/gastos-fixos'
 import { Route as LancamentosRouteImport } from './routes/lancamentos'
 import { Route as MetasRouteImport } from './routes/metas'
 import { Route as TabelaDinamicaRouteImport } from './routes/tabela-dinamica'
+import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as MesAnoMesRouteImport } from './routes/mes.$ano.$mes'
 
 const IndexRoute = IndexRouteImport.update({
@@ -24,6 +26,11 @@ const IndexRoute = IndexRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GastosFixosRoute = GastosFixosRouteImport.update({
+  id: '/gastos-fixos',
+  path: '/gastos-fixos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LancamentosRoute = LancamentosRouteImport.update({
@@ -41,6 +48,11 @@ const TabelaDinamicaRoute = TabelaDinamicaRouteImport.update({
   path: '/tabela-dinamica',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WishlistRoute = WishlistRouteImport.update({
+  id: '/wishlist',
+  path: '/wishlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MesAnoMesRoute = MesAnoMesRouteImport.update({
   id: '/mes/$ano/$mes',
   path: '/mes/$ano/$mes',
@@ -50,26 +62,32 @@ const MesAnoMesRoute = MesAnoMesRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/gastos-fixos': typeof GastosFixosRoute
   '/lancamentos': typeof LancamentosRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
+  '/wishlist': typeof WishlistRoute
   '/mes/$ano/$mes': typeof MesAnoMesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/gastos-fixos': typeof GastosFixosRoute
   '/lancamentos': typeof LancamentosRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
+  '/wishlist': typeof WishlistRoute
   '/mes/$ano/$mes': typeof MesAnoMesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/gastos-fixos': typeof GastosFixosRoute
   '/lancamentos': typeof LancamentosRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
+  '/wishlist': typeof WishlistRoute
   '/mes/$ano/$mes': typeof MesAnoMesRoute
 }
 export interface FileRouteTypes {
@@ -77,34 +95,42 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/configuracoes'
+    | '/gastos-fixos'
     | '/lancamentos'
     | '/metas'
     | '/tabela-dinamica'
+    | '/wishlist'
     | '/mes/$ano/$mes'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/configuracoes'
+    | '/gastos-fixos'
     | '/lancamentos'
     | '/metas'
     | '/tabela-dinamica'
+    | '/wishlist'
     | '/mes/$ano/$mes'
   id:
     | '__root__'
     | '/'
     | '/configuracoes'
+    | '/gastos-fixos'
     | '/lancamentos'
     | '/metas'
     | '/tabela-dinamica'
+    | '/wishlist'
     | '/mes/$ano/$mes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  GastosFixosRoute: typeof GastosFixosRoute
   LancamentosRoute: typeof LancamentosRoute
   MetasRoute: typeof MetasRoute
   TabelaDinamicaRoute: typeof TabelaDinamicaRoute
+  WishlistRoute: typeof WishlistRoute
   MesAnoMesRoute: typeof MesAnoMesRoute
 }
 
@@ -122,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gastos-fixos': {
+      id: '/gastos-fixos'
+      path: '/gastos-fixos'
+      fullPath: '/gastos-fixos'
+      preLoaderRoute: typeof GastosFixosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/lancamentos': {
@@ -145,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TabelaDinamicaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/wishlist': {
+      id: '/wishlist'
+      path: '/wishlist'
+      fullPath: '/wishlist'
+      preLoaderRoute: typeof WishlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mes/$ano/$mes': {
       id: '/mes/$ano/$mes'
       path: '/mes/$ano/$mes'
@@ -158,9 +198,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  GastosFixosRoute: GastosFixosRoute,
   LancamentosRoute: LancamentosRoute,
   MetasRoute: MetasRoute,
   TabelaDinamicaRoute: TabelaDinamicaRoute,
+  WishlistRoute: WishlistRoute,
   MesAnoMesRoute: MesAnoMesRoute,
 }
 export const routeTree = rootRouteImport
