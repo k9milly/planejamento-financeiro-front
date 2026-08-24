@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Bar,
   BarChart,
@@ -20,6 +20,7 @@ import { KpiCard } from "@/components/finance/KpiCard";
 import { usePeriod } from "@/components/finance/period-context";
 import { useTransactions } from "@/components/finance/transactions-context";
 import { MONTHS, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -90,6 +91,15 @@ function Dashboard() {
     <AppShell
       title="Dashboard"
       subtitle={month === 0 ? `Visão do ano ${year}` : `${MONTHS[month - 1]} de ${year}`}
+      actions={
+        month !== 0 ? (
+          <Button asChild size="sm" className="gap-2">
+            <Link to="/mes/$ano/$mes" params={{ ano: String(year), mes: String(month) }}>
+              Ver detalhes de {MONTHS[month - 1]}
+            </Link>
+          </Button>
+        ) : undefined
+      }
     >
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
@@ -126,6 +136,18 @@ function Dashboard() {
           <header className="mb-4">
             <h2 className="text-base font-semibold">Entradas vs Saídas</h2>
             <p className="text-xs text-muted-foreground">Evolução mensal em {year}</p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {monthly.map((m) => (
+                <Link
+                  key={m.mes}
+                  to="/mes/$ano/$mes"
+                  params={{ ano: String(year), mes: String(MONTHS.indexOf(m.mes) + 1) }}
+                  className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  {m.mes}
+                </Link>
+              ))}
+            </div>
           </header>
           <div className="h-[320px]">
             <ResponsiveContainer width="100%" height="100%">

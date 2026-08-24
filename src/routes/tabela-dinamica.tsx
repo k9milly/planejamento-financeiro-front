@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/finance/AppShell";
 import { usePeriod } from "@/components/finance/period-context";
@@ -72,9 +72,15 @@ function PivotPage() {
               <th className="sticky left-0 z-10 border-b border-r border-border bg-surface-2 px-4 py-3 text-left font-medium">
                 Categoria
               </th>
-              {MONTHS.map((m) => (
+              {MONTHS.map((m, i) => (
                 <th key={m} className="border-b border-border px-3 py-3 text-right font-medium">
-                  {m}
+                  <Link
+                    to="/mes/$ano/$mes"
+                    params={{ ano: String(year), mes: String(i + 1) }}
+                    className="transition-colors hover:text-primary"
+                  >
+                    {m}
+                  </Link>
                 </th>
               ))}
               <th className="border-b border-l border-border px-4 py-3 text-right font-medium">
