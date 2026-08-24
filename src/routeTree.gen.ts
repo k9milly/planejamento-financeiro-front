@@ -14,6 +14,7 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as LancamentosRouteImport } from './routes/lancamentos'
 import { Route as MetasRouteImport } from './routes/metas'
 import { Route as TabelaDinamicaRouteImport } from './routes/tabela-dinamica'
+import { Route as MesAnoMesRouteImport } from './routes/mes.$ano.$mes'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,6 +41,11 @@ const TabelaDinamicaRoute = TabelaDinamicaRouteImport.update({
   path: '/tabela-dinamica',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MesAnoMesRoute = MesAnoMesRouteImport.update({
+  id: '/mes/$ano/$mes',
+  path: '/mes/$ano/$mes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/lancamentos': typeof LancamentosRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
+  '/mes/$ano/$mes': typeof MesAnoMesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/lancamentos': typeof LancamentosRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
+  '/mes/$ano/$mes': typeof MesAnoMesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +70,25 @@ export interface FileRoutesById {
   '/lancamentos': typeof LancamentosRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
+  '/mes/$ano/$mes': typeof MesAnoMesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/configuracoes' | '/lancamentos' | '/metas' | '/tabela-dinamica'
+    | '/'
+    | '/configuracoes'
+    | '/lancamentos'
+    | '/metas'
+    | '/tabela-dinamica'
+    | '/mes/$ano/$mes'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/configuracoes' | '/lancamentos' | '/metas' | '/tabela-dinamica'
+  to:
+    | '/'
+    | '/configuracoes'
+    | '/lancamentos'
+    | '/metas'
+    | '/tabela-dinamica'
+    | '/mes/$ano/$mes'
   id:
     | '__root__'
     | '/'
@@ -76,6 +96,7 @@ export interface FileRouteTypes {
     | '/lancamentos'
     | '/metas'
     | '/tabela-dinamica'
+    | '/mes/$ano/$mes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -84,6 +105,7 @@ export interface RootRouteChildren {
   LancamentosRoute: typeof LancamentosRoute
   MetasRoute: typeof MetasRoute
   TabelaDinamicaRoute: typeof TabelaDinamicaRoute
+  MesAnoMesRoute: typeof MesAnoMesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -123,6 +145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TabelaDinamicaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mes/$ano/$mes': {
+      id: '/mes/$ano/$mes'
+      path: '/mes/$ano/$mes'
+      fullPath: '/mes/$ano/$mes'
+      preLoaderRoute: typeof MesAnoMesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -132,6 +161,7 @@ const rootRouteChildren: RootRouteChildren = {
   LancamentosRoute: LancamentosRoute,
   MetasRoute: MetasRoute,
   TabelaDinamicaRoute: TabelaDinamicaRoute,
+  MesAnoMesRoute: MesAnoMesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
