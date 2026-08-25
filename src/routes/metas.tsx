@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Target, Wallet } from "lucide-react";
+import { Info, Target, Wallet } from "lucide-react";
 import { AppShell } from "@/components/finance/AppShell";
 import { usePeriod } from "@/components/finance/period-context";
-import { useTransactions } from "@/components/finance/transactions-context";
-import { MONTHS, budgets, categoriaPorNome, formatBRL, getMonth, goals } from "@/lib/finance-data";
+import { useResumo } from "@/hooks/useResumo";
+import { MONTHS, budgets, formatBRL, goals } from "@/lib/finance-data";
 
 export const Route = createFileRoute("/metas")({
   head: () => ({
@@ -36,20 +36,22 @@ function Bar({ percent, tone }: { percent: number; tone: "income" | "expense" | 
 }
 
 function MetasPage() {
-  const { items } = useTransactions();
   const { month, year } = usePeriod();
+  const { data: resumo } = useResumo(year);
+  const meses = resumo?.meses ?? [];
 
+  // Gasto real por categoria — o backend já traz isso pronto no resumo
+  // (mesma fonte usada no Dashboard e na Tabela Dinâmica). Os orçamentos
+  // (limites) e as metas de poupança, porém, não têm endpoint no backend
+  // (ver ADR 0007 do backend), então continuam como dados de exemplo.
   const spent = (category: string) => {
-    const categoriaId = categoriaPorNome(category)?.id;
-    return items
-      .filter(
-        (t) =>
-          t.categoriaId === categoriaId &&
-          t.tipo === "saida" &&
-          Number(t.data.slice(0, 4)) === year &&
-          (month === 0 || getMonth(t) === month),
-      )
-      .reduce((a, t) => a + t.valor, 0);
+    if (month === 0) {
+      return meses.reduce(
+        (a, m) => a + (m.gastosPorCategoria.find((g) => g.categoria === category)?.total ?? 0),
+        0,
+      );
+    }
+    return meses[month - 1]?.gastosPorCategoria.find((g) => g.categoria === category)?.total ?? 0;
   };
 
   return (
@@ -57,6 +59,13 @@ function MetasPage() {
       title="Metas & Orçamentos"
       subtitle={month === 0 ? `Ano ${year}` : `${MONTHS[month - 1]} de ${year}`}
     >
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-surface-2 px-4 py-3 text-xs text-muted-foreground">
+        <Info size={14} className="mt-0.5 shrink-0" />
+        <p>
+          Os limites de orçamento e as metas de poupança abaixo são dados de exemplo — o
+          acompanhamento de gasto por categoria já usa os lançamentos reais.
+        </p>
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="panel p-5">
           <header className="mb-5 flex items-center gap-2">

@@ -18,11 +18,13 @@ import { ArrowDownRight, ArrowUpRight, CreditCard, PiggyBank, Wallet } from "luc
 import { AppShell } from "@/components/finance/AppShell";
 import { CalendarioVencimentos } from "@/components/finance/CalendarioVencimentos";
 import { KpiCard } from "@/components/finance/KpiCard";
-import { useAccounts } from "@/components/finance/accounts-context";
-import { useCategories } from "@/components/finance/categories-context";
 import { usePeriod } from "@/components/finance/period-context";
-import { useTransactions } from "@/components/finance/transactions-context";
-import { MONTHS, categoriaPorId, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
+import { useCategorias } from "@/hooks/useCategorias";
+import { useContas } from "@/hooks/useContas";
+import { useLancamentos } from "@/hooks/useLancamentos";
+import { useResumo } from "@/hooks/useResumo";
+import type { GastoCategoria } from "@/lib/api-client";
+import { MONTHS, formatBRL, formatDate, type Conta } from "@/lib/finance-data";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -52,47 +54,72 @@ const DONUT_COLORS = [
   "var(--primary)",
 ];
 
+/** `GET /contas` não traz saldo — junta com `por_conta`/`por_cartao` do resumo (Fase 6b). */
+function comSaldo(conta: Conta, porConta: { contaId: string; saldo: number }[]): Conta {
+  const achou = porConta.find((c) => c.contaId === conta.id);
+  return achou ? { ...conta, saldo: achou.saldo } : conta;
+}
+
+/** Soma `gastos_por_categoria` de vários meses num só array — usado quando "Ano inteiro" está selecionado. */
+function somarCategorias(listas: GastoCategoria[][]): GastoCategoria[] {
+  const totais = new Map<string, number>();
+  for (const lista of listas) {
+    for (const g of lista) totais.set(g.categoria, (totais.get(g.categoria) ?? 0) + g.total);
+  }
+  const somaGeral = [...totais.values()].reduce((a, v) => a + v, 0) || 1;
+  return [...totais.entries()]
+    .map(([categoria, total]) => ({ categoria, total, percentual: (total / somaGeral) * 100 }))
+    .sort((a, b) => b.total - a.total);
+}
+
 function Dashboard() {
-  const { items } = useTransactions();
-  const { items: accounts } = useAccounts();
-  const { items: categorias } = useCategories();
   const { month, year } = usePeriod();
 
-  const inPeriod = items.filter(
-    (t) => Number(t.data.slice(0, 4)) === year && (month === 0 || getMonth(t) === month),
-  );
+  const { data: resumo } = useResumo(year);
+  const { data: contas = [] } = useContas();
+  const { data: categorias = [] } = useCategorias();
+  const { data: recentes = [] } = useLancamentos(year, month !== 0 ? { mes: month } : undefined);
 
-  // Simplificação de mock (igual à de Lançamentos): só entrada/saída contam
-  // nos KPIs de fluxo — guardado, retirado, rendimento, perda e
-  // transferência dependem de conta/destino, e ficam para a integração real.
-  const income = inPeriod.filter((t) => t.tipo === "entrada").reduce((a, t) => a + t.valor, 0);
-  const expense = inPeriod.filter((t) => t.tipo === "saida").reduce((a, t) => a + t.valor, 0);
+  const mesResumo = month !== 0 ? resumo?.meses[month - 1] : undefined;
+
+  const income = month !== 0 ? (mesResumo?.entradas ?? 0) : (resumo?.totalEntradas ?? 0);
+  const expense = month !== 0 ? (mesResumo?.saidas ?? 0) : (resumo?.totalSaidas ?? 0);
   const savingRate = income > 0 ? ((income - expense) / income) * 100 : 0;
 
-  const totalBalance = items
-    .filter((t) => Number(t.data.slice(0, 4)) === year)
-    .reduce((a, t) => a + (t.tipo === "entrada" ? t.valor : t.tipo === "saida" ? -t.valor : 0), 0);
+  // "Saldo Total" é o saldo real de fechamento — já exclui o que foi gasto
+  // no crédito e ainda não foi pago (o "saldo inteligente" do backend), não
+  // uma soma ingênua de lançamentos.
+  const totalBalance = resumo?.saldoFinal ?? 0;
 
-  const monthly = MONTHS.map((label, i) => {
-    const rows = items.filter((t) => Number(t.data.slice(0, 4)) === year && getMonth(t) === i + 1);
-    const e = rows.filter((t) => t.tipo === "entrada").reduce((a, t) => a + t.valor, 0);
-    const s = rows.filter((t) => t.tipo === "saida").reduce((a, t) => a + t.valor, 0);
-    return { mes: label, Entradas: e, Saídas: s, Saldo: e - s };
-  }).filter((m) => m.Entradas > 0 || m["Saídas"] > 0);
+  const monthly = (resumo?.meses ?? [])
+    .map((m) => ({
+      mesNumero: m.mes,
+      mes: MONTHS[m.mes - 1] ?? String(m.mes),
+      Entradas: m.entradas,
+      Saídas: m.saidas,
+      Saldo: m.saldo,
+    }))
+    .filter((m) => m.Entradas > 0 || m["Saídas"] > 0);
 
-  const byCategory = Object.entries(
-    inPeriod
-      .filter((t) => t.tipo === "saida")
-      .reduce<Record<string, number>>((acc, t) => {
-        const nome = categoriaPorId(t.categoriaId)?.nome ?? "Sem categoria";
-        acc[nome] = (acc[nome] ?? 0) + t.valor;
-        return acc;
-      }, {}),
-  )
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  const byCategory: { name: string; value: number }[] =
+    month !== 0
+      ? (mesResumo?.gastosPorCategoria ?? []).map((g) => ({ name: g.categoria, value: g.total }))
+      : somarCategorias((resumo?.meses ?? []).map((m) => m.gastosPorCategoria)).map((g) => ({
+          name: g.categoria,
+          value: g.total,
+        }));
 
-  const recent = [...inPeriod].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 6);
+  const contasComSaldo = contas.map((c) => comSaldo(c, resumo?.porConta ?? []));
+  const cartoesComFatura = contas
+    .filter((c) => c.tipo === "cartao_credito")
+    .map((c) =>
+      comSaldo(
+        c,
+        (resumo?.porCartao ?? []).map((p) => ({ ...p, saldo: -p.saldo })),
+      ),
+    );
+
+  const recent = [...recentes].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 6);
 
   const mesCalendario = month === 0 ? null : month;
 
@@ -120,14 +147,14 @@ function Dashboard() {
         <KpiCard
           label="Entradas do Período"
           value={formatBRL(income)}
-          hint={`${inPeriod.filter((t) => t.tipo === "entrada").length} lançamentos`}
+          hint="Vindo do resumo do backend"
           icon={ArrowUpRight}
           tone="income"
         />
         <KpiCard
           label="Saídas do Período"
           value={formatBRL(expense)}
-          hint={`${inPeriod.filter((t) => t.tipo === "saida").length} lançamentos`}
+          hint="Vindo do resumo do backend"
           icon={ArrowDownRight}
           tone="expense"
         />
@@ -151,41 +178,42 @@ function Dashboard() {
           </p>
         </header>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {accounts.map((conta) => (
-            <div
-              key={conta.id}
-              className="surface-2 rounded-xl border border-border bg-surface-2 p-4"
-            >
+          {contasComSaldo
+            .filter((c) => c.tipo === "corrente")
+            .map((conta) => (
+              <div key={conta.id} className="rounded-xl border border-border bg-surface-2 p-4">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex size-8 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: `${conta.cor}26`, color: conta.cor }}
+                  >
+                    <Wallet size={15} />
+                  </span>
+                  <p className="truncate text-sm font-medium">{conta.nome}</p>
+                </div>
+                <p className="mt-3 text-xl font-semibold tabular-nums text-income">
+                  {formatBRL(conta.saldo ?? 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">saldo disponível</p>
+              </div>
+            ))}
+          {cartoesComFatura.map((conta) => (
+            <div key={conta.id} className="rounded-xl border border-border bg-surface-2 p-4">
               <div className="flex items-center gap-2">
                 <span
                   className="flex size-8 items-center justify-center rounded-lg"
                   style={{ backgroundColor: `${conta.cor}26`, color: conta.cor }}
                 >
-                  {conta.tipo === "cartao_credito" ? (
-                    <CreditCard size={15} />
-                  ) : (
-                    <Wallet size={15} />
-                  )}
+                  <CreditCard size={15} />
                 </span>
                 <p className="truncate text-sm font-medium">{conta.nome}</p>
               </div>
-              {conta.tipo === "cartao_credito" ? (
-                <>
-                  <p className="mt-3 text-xl font-semibold tabular-nums text-expense">
-                    {formatBRL(conta.faturaEmAberto ?? 0)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    fatura em aberto • vence dia {conta.diaVencimentoFatura}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-3 text-xl font-semibold tabular-nums text-income">
-                    {formatBRL(conta.saldo)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">saldo disponível</p>
-                </>
-              )}
+              <p className="mt-3 text-xl font-semibold tabular-nums text-expense">
+                {formatBRL(conta.saldo ?? 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                fatura em aberto • vence dia {conta.diaVencimentoFatura}
+              </p>
             </div>
           ))}
         </div>
@@ -201,7 +229,7 @@ function Dashboard() {
                 <Link
                   key={m.mes}
                   to="/mes/$ano/$mes"
-                  params={{ ano: String(year), mes: String(MONTHS.indexOf(m.mes) + 1) }}
+                  params={{ ano: String(year), mes: String(m.mesNumero) }}
                   className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
                   {m.mes}
@@ -305,20 +333,29 @@ function Dashboard() {
         <section className="panel p-5 xl:col-span-2">
           <h2 className="mb-4 text-base font-semibold">Lançamentos recentes</h2>
           <ul className="divide-y divide-border">
-            {recent.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 py-3 text-sm">
-                <span className="w-20 shrink-0 text-muted-foreground">{formatDate(t.data)}</span>
-                <span className="min-w-0 flex-1 truncate">{t.descricao}</span>
-                <span className="hidden text-muted-foreground sm:block">
-                  {categoriaPorId(t.categoriaId)?.nome ?? "—"}
-                </span>
-                <span
-                  className={`w-32 text-right tabular-nums ${t.tipo === "entrada" ? "text-income" : t.tipo === "saida" ? "text-expense" : ""}`}
-                >
-                  {t.tipo === "entrada" ? "+" : t.tipo === "saida" ? "−" : ""} {formatBRL(t.valor)}
-                </span>
+            {recent.map((t) => {
+              const categoria = categorias.find((c) => c.id === t.categoriaId);
+              return (
+                <li key={t.id} className="flex items-center gap-3 py-3 text-sm">
+                  <span className="w-20 shrink-0 text-muted-foreground">{formatDate(t.data)}</span>
+                  <span className="min-w-0 flex-1 truncate">{t.descricao}</span>
+                  <span className="hidden text-muted-foreground sm:block">
+                    {categoria?.nome ?? "—"}
+                  </span>
+                  <span
+                    className={`w-32 text-right tabular-nums ${t.tipo === "entrada" ? "text-income" : t.tipo === "saida" ? "text-expense" : ""}`}
+                  >
+                    {t.tipo === "entrada" ? "+" : t.tipo === "saida" ? "−" : ""}{" "}
+                    {formatBRL(t.valor)}
+                  </span>
+                </li>
+              );
+            })}
+            {recent.length === 0 && (
+              <li className="py-6 text-center text-sm text-muted-foreground">
+                Nenhum lançamento neste período.
               </li>
-            ))}
+            )}
           </ul>
         </section>
 

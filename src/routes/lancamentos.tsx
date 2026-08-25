@@ -3,16 +3,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/finance/AppShell";
-import { useAccounts } from "@/components/finance/accounts-context";
-import { useCategories } from "@/components/finance/categories-context";
 import { usePeriod } from "@/components/finance/period-context";
-import { useTransactions } from "@/components/finance/transactions-context";
+import { useCategorias } from "@/hooks/useCategorias";
+import { useContas } from "@/hooks/useContas";
 import {
-  categoriaPorId,
-  contaPorId,
+  useAtualizarLancamento,
+  useCriarLancamento,
+  useExcluirLancamento,
+  useLancamentos,
+} from "@/hooks/useLancamentos";
+import {
   formatBRL,
   formatDate,
-  getMonth,
   MONTHS,
   ROTULO_FORMA_PAGAMENTO,
   ROTULO_TIPO_LANCAMENTO,
@@ -91,14 +93,29 @@ function emptyForm(contaId: string, categoriaId: string): FormState {
 }
 
 function LancamentosPage() {
-  const { items, add, update, remove } = useTransactions();
-  const { items: accounts } = useAccounts();
-  const { items: categorias } = useCategories();
   const { month, year } = usePeriod();
+
+  const { data: accounts = [], isLoading: carregandoContas } = useContas();
+  const { data: categorias = [], isLoading: carregandoCategorias } = useCategorias();
 
   const [query, setQuery] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("todas");
   const [tipoFiltro, setTipoFiltro] = useState<"todos" | TipoLancamento>("todos");
+
+  // Categoria/tipo filtram no servidor (menos dado trafegado); busca por
+  // texto livre continua no cliente — a API não tem busca por texto.
+  const { data: lancamentos = [], isLoading: carregandoLancamentos } = useLancamentos(year, {
+    ...(month !== 0 ? { mes: month } : {}),
+    ...(categoriaFiltro !== "todas" ? { categoriaId: categoriaFiltro } : {}),
+    ...(tipoFiltro !== "todos" ? { tipo: tipoFiltro } : {}),
+  });
+  const criar = useCriarLancamento(year);
+  const atualizar = useAtualizarLancamento(year);
+  const excluirMutacao = useExcluirLancamento(year);
+
+  const categoriaPorId = (id: string | undefined) => categorias.find((c) => c.id === id);
+  const contaPorId = (id: string | undefined) => accounts.find((a) => a.id === id);
+
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Lancamento | null>(null);
   const [form, setForm] = useState<FormState>(() =>
@@ -134,10 +151,7 @@ function LancamentosPage() {
 
   const rows = useMemo(
     () =>
-      items
-        .filter(
-          (t) => Number(t.data.slice(0, 4)) === year && (month === 0 || getMonth(t) === month),
-        )
+      [...lancamentos]
         .filter((t) =>
           query
             ? `${t.descricao} ${categoriaPorId(t.categoriaId)?.nome ?? ""}`
@@ -145,16 +159,15 @@ function LancamentosPage() {
                 .includes(query.toLowerCase())
             : true,
         )
-        .filter((t) => (categoriaFiltro === "todas" ? true : t.categoriaId === categoriaFiltro))
-        .filter((t) => (tipoFiltro === "todos" ? true : t.tipo === tipoFiltro))
         .sort((a, b) => b.data.localeCompare(a.data)),
-    [items, year, month, query, categoriaFiltro, tipoFiltro],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lancamentos, query],
   );
 
-  // Simplificação de mock: só entrada/saída entram nesse saldo de
-  // conferência — guardado, retirado, rendimento, perda e transferência têm
-  // efeitos que dependem de conta/destino, e ficam para quando isso vier de
-  // verdade da API (ver PLANO-FRONTEND.md).
+  // Simplificação (ver ADR-01/api-client.ts): só entrada/saída entram nesse
+  // rótulo de conferência local — guardado, retirado, rendimento, perda e
+  // transferência têm efeitos que dependem de conta/destino, e os totais
+  // autoritativos (KPIs) já vêm prontos de `useResumo` nas outras telas.
   const total = rows.reduce(
     (a, t) => a + (t.tipo === "entrada" ? t.valor : t.tipo === "saida" ? -t.valor : 0),
     0,
@@ -206,14 +219,26 @@ function LancamentosPage() {
       ...(ehRendimentoOuPerda ? { destino: form.destino } : {}),
     };
 
-    if (editing) {
-      update(editing.id, payload);
-      toast.success("Lançamento atualizado.");
-    } else {
-      add(payload);
-      toast.success("Lançamento criado.");
-    }
-    setOpen(false);
+    const mutacao = editing
+      ? atualizar.mutateAsync({ id: editing.id, dados: payload })
+      : criar.mutateAsync(payload);
+
+    mutacao
+      .then(() => {
+        toast.success(editing ? "Lançamento atualizado." : "Lançamento criado.");
+        setOpen(false);
+      })
+      // ADR-01: toda resposta de erro tem `detail` pronto para exibir — é
+      // exatamente `error.message` aqui, já que `ErroApi` usa isso como
+      // mensagem (ver `lib/api-client.ts`).
+      .catch((e) => toast.error(e instanceof Error ? e.message : "A operação falhou."));
+  }
+
+  function excluir(id: string) {
+    excluirMutacao
+      .mutateAsync(id)
+      .then(() => toast.success("Lançamento excluído."))
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível excluir."));
   }
 
   return (
@@ -221,7 +246,11 @@ function LancamentosPage() {
       title="Lançamentos"
       subtitle={month === 0 ? `Ano ${year}` : `${MONTHS[month - 1]} de ${year}`}
       actions={
-        <Button onClick={openNew} className="gap-2">
+        <Button
+          onClick={openNew}
+          disabled={carregandoContas || carregandoCategorias}
+          className="gap-2"
+        >
           <Plus size={16} /> Novo Lançamento
         </Button>
       }
@@ -340,10 +369,7 @@ function LancamentosPage() {
                       variant="ghost"
                       size="icon"
                       aria-label="Excluir"
-                      onClick={() => {
-                        remove(t.id);
-                        toast.success("Lançamento excluído.");
-                      }}
+                      onClick={() => excluir(t.id)}
                     >
                       <Trash2 size={16} className="text-expense" />
                     </Button>
@@ -351,7 +377,14 @@ function LancamentosPage() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && (
+            {carregandoLancamentos && (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                  Carregando…
+                </td>
+              </tr>
+            )}
+            {!carregandoLancamentos && rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                   Nenhum lançamento encontrado para os filtros selecionados.
@@ -514,7 +547,9 @@ function LancamentosPage() {
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={save}>Salvar</Button>
+            <Button onClick={save} disabled={criar.isPending || atualizar.isPending}>
+              Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
 import { ArrowDownRight, ArrowLeft, ArrowUpRight, PiggyBank, Wallet } from "lucide-react";
 import { AppShell } from "@/components/finance/AppShell";
 import { KpiCard } from "@/components/finance/KpiCard";
-import { useTransactions } from "@/components/finance/transactions-context";
-import { categoriaPorId, MONTHS, formatBRL, formatDate, getMonth } from "@/lib/finance-data";
+import { useCategorias } from "@/hooks/useCategorias";
+import { useLancamentos } from "@/hooks/useLancamentos";
+import { useResumo } from "@/hooks/useResumo";
+import { MONTHS, formatBRL, formatDate } from "@/lib/finance-data";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/mes/$ano/$mes")({
@@ -27,36 +28,26 @@ export const Route = createFileRoute("/mes/$ano/$mes")({
 
 function MonthDetail() {
   const { ano, mes } = Route.useParams();
-  const { items } = useTransactions();
 
   const year = Number(ano);
   const month = Math.min(12, Math.max(1, Number(mes) || 1));
   const label = `${MONTHS[month - 1]} de ${year}`;
 
-  const rows = useMemo(
-    () =>
-      items
-        .filter((t) => Number(t.data.slice(0, 4)) === year && getMonth(t) === month)
-        .sort((a, b) => b.data.localeCompare(a.data)),
-    [items, year, month],
-  );
+  const { data: resumo } = useResumo(year);
+  const { data: rows = [], isLoading } = useLancamentos(year, { mes: month });
+  const { data: categorias = [] } = useCategorias();
 
-  const income = rows.filter((t) => t.tipo === "entrada").reduce((a, t) => a + t.valor, 0);
-  const expense = rows.filter((t) => t.tipo === "saida").reduce((a, t) => a + t.valor, 0);
-  const balance = income - expense;
+  const mesResumo = resumo?.meses[month - 1];
+  const income = mesResumo?.entradas ?? 0;
+  const expense = mesResumo?.saidas ?? 0;
+  const balance = mesResumo?.saldo ?? 0;
   const savingRate = income > 0 ? ((income - expense) / income) * 100 : 0;
 
-  const byCategory = Object.entries(
-    rows
-      .filter((t) => t.tipo === "saida")
-      .reduce<Record<string, number>>((acc, t) => {
-        const nome = categoriaPorId(t.categoriaId)?.nome ?? "Sem categoria";
-        acc[nome] = (acc[nome] ?? 0) + t.valor;
-        return acc;
-      }, {}),
-  )
-    .map(([name, value]) => ({ name, value }))
+  const byCategory = [...(mesResumo?.gastosPorCategoria ?? [])]
+    .map((g) => ({ name: g.categoria, value: g.total }))
     .sort((a, b) => b.value - a.value);
+
+  const linhas = [...rows].sort((a, b) => b.data.localeCompare(a.data));
 
   const maxCat = byCategory[0]?.value ?? 1;
   const prev = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
@@ -91,14 +82,14 @@ function MonthDetail() {
         <KpiCard
           label="Entradas"
           value={formatBRL(income)}
-          hint={`${rows.filter((t) => t.tipo === "entrada").length} lançamentos`}
+          hint={`${linhas.filter((t) => t.tipo === "entrada").length} lançamentos`}
           icon={ArrowUpRight}
           tone="income"
         />
         <KpiCard
           label="Saídas"
           value={formatBRL(expense)}
-          hint={`${rows.filter((t) => t.tipo === "saida").length} lançamentos`}
+          hint={`${linhas.filter((t) => t.tipo === "saida").length} lançamentos`}
           icon={ArrowDownRight}
           tone="expense"
         />
@@ -146,14 +137,14 @@ function MonthDetail() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((t) => (
+              {linhas.map((t) => (
                 <tr key={t.id} className="transition-colors hover:bg-accent/40">
                   <td className="border-b border-border px-4 py-3 text-muted-foreground">
                     {formatDate(t.data)}
                   </td>
                   <td className="border-b border-border px-4 py-3">{t.descricao}</td>
                   <td className="border-b border-border px-4 py-3 text-muted-foreground">
-                    {categoriaPorId(t.categoriaId)?.nome ?? "—"}
+                    {categorias.find((c) => c.id === t.categoriaId)?.nome ?? "—"}
                   </td>
                   <td
                     className={`border-b border-border px-4 py-3 text-right tabular-nums ${t.tipo === "entrada" ? "text-income" : t.tipo === "saida" ? "text-expense" : ""}`}
@@ -163,7 +154,14 @@ function MonthDetail() {
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {isLoading && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                    Carregando…
+                  </td>
+                </tr>
+              )}
+              {!isLoading && linhas.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
                     Nenhum lançamento em {label}.

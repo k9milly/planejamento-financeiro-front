@@ -1,9 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/finance/AppShell";
-import { useCategories } from "@/components/finance/categories-context";
 import { usePeriod } from "@/components/finance/period-context";
-import { useTransactions } from "@/components/finance/transactions-context";
-import { MONTHS, formatBRL, getMonth } from "@/lib/finance-data";
+import { useResumo } from "@/hooks/useResumo";
+import { MONTHS, formatBRL } from "@/lib/finance-data";
 
 export const Route = createFileRoute("/tabela-dinamica")({
   head: () => ({
@@ -24,29 +23,26 @@ export const Route = createFileRoute("/tabela-dinamica")({
 });
 
 function PivotPage() {
-  const { items } = useTransactions();
-  const { items: categorias } = useCategories();
   const { year } = usePeriod();
+  const { data: resumo, isLoading } = useResumo(year);
+  const meses = resumo?.meses ?? [];
 
   // Só saída tem categoria neste domínio (guardado, retirado, rendimento,
   // perda e transferência não têm — ver Lançamentos), então a tabela
-  // dinâmica é sempre sobre saídas; não há mais o que escolher aqui.
-  const rows = categorias
+  // dinâmica é sempre sobre saídas — o backend só devolve `gastos_por_categoria`
+  // de saídas mesmo, então não há filtro a fazer aqui: é transposição direta.
+  const categoriasComGasto = [
+    ...new Set(meses.flatMap((m) => m.gastosPorCategoria.map((g) => g.categoria))),
+  ].sort();
+
+  const rows = categoriasComGasto
     .map((categoria) => {
-      const values = MONTHS.map((_, i) =>
-        items
-          .filter(
-            (t) =>
-              t.categoriaId === categoria.id &&
-              t.tipo === "saida" &&
-              Number(t.data.slice(0, 4)) === year &&
-              getMonth(t) === i + 1,
-          )
-          .reduce((a, t) => a + t.valor, 0),
+      const values = meses.map(
+        (m) => m.gastosPorCategoria.find((g) => g.categoria === categoria)?.total ?? 0,
       );
       const total = values.reduce((a, b) => a + b, 0);
       const active = values.filter((v) => v > 0).length;
-      return { category: categoria.nome, values, total, average: active ? total / active : 0 };
+      return { category: categoria, values, total, average: active ? total / active : 0 };
     })
     .filter((r) => r.total > 0);
 
@@ -109,6 +105,13 @@ function PivotPage() {
                 </td>
               </tr>
             ))}
+            {isLoading && (
+              <tr>
+                <td colSpan={15} className="px-4 py-10 text-center text-muted-foreground">
+                  Carregando…
+                </td>
+              </tr>
+            )}
             <tr className="bg-surface-2 font-semibold">
               <td className="sticky left-0 z-10 border-r border-border bg-surface-2 px-4 py-3">
                 Total

@@ -1,16 +1,16 @@
-import { useAccounts } from "./accounts-context";
-import { useGastosFixos } from "./gastos-fixos-context";
+import { useContas } from "@/hooks/useContas";
+import { useGastosFixos } from "@/hooks/useGastosFixos";
 
 const DIAS_SEMANA = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 /**
  * Mini calendário do mês selecionado, marcando os dias em que algum gasto
  * fixo ou fatura de cartão vence. Mesma ideia do calendário do modo painel
- * do backend — aqui só com dado mocado.
+ * do backend.
  */
 export function CalendarioVencimentos({ year, month }: { year: number; month: number }) {
-  const { items: gastosFixos } = useGastosFixos();
-  const { items: accounts } = useAccounts();
+  const { data: gastosFixos = [] } = useGastosFixos(year);
+  const { data: accounts = [] } = useContas();
 
   const ultimoDia = new Date(year, month, 0).getDate();
   const deslocamento = new Date(year, month - 1, 1).getDay();

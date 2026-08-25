@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as GastosFixosRouteImport } from './routes/gastos-fixos'
 import { Route as LancamentosRouteImport } from './routes/lancamentos'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as MetasRouteImport } from './routes/metas'
 import { Route as TabelaDinamicaRouteImport } from './routes/tabela-dinamica'
 import { Route as WishlistRouteImport } from './routes/wishlist'
@@ -36,6 +37,11 @@ const GastosFixosRoute = GastosFixosRouteImport.update({
 const LancamentosRoute = LancamentosRouteImport.update({
   id: '/lancamentos',
   path: '/lancamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MetasRoute = MetasRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/gastos-fixos': typeof GastosFixosRoute
   '/lancamentos': typeof LancamentosRoute
+  '/login': typeof LoginRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
   '/wishlist': typeof WishlistRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/gastos-fixos': typeof GastosFixosRoute
   '/lancamentos': typeof LancamentosRoute
+  '/login': typeof LoginRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
   '/wishlist': typeof WishlistRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/gastos-fixos': typeof GastosFixosRoute
   '/lancamentos': typeof LancamentosRoute
+  '/login': typeof LoginRoute
   '/metas': typeof MetasRoute
   '/tabela-dinamica': typeof TabelaDinamicaRoute
   '/wishlist': typeof WishlistRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/gastos-fixos'
     | '/lancamentos'
+    | '/login'
     | '/metas'
     | '/tabela-dinamica'
     | '/wishlist'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/gastos-fixos'
     | '/lancamentos'
+    | '/login'
     | '/metas'
     | '/tabela-dinamica'
     | '/wishlist'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/gastos-fixos'
     | '/lancamentos'
+    | '/login'
     | '/metas'
     | '/tabela-dinamica'
     | '/wishlist'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   GastosFixosRoute: typeof GastosFixosRoute
   LancamentosRoute: typeof LancamentosRoute
+  LoginRoute: typeof LoginRoute
   MetasRoute: typeof MetasRoute
   TabelaDinamicaRoute: typeof TabelaDinamicaRoute
   WishlistRoute: typeof WishlistRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/lancamentos'
       fullPath: '/lancamentos'
       preLoaderRoute: typeof LancamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/metas': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   GastosFixosRoute: GastosFixosRoute,
   LancamentosRoute: LancamentosRoute,
+  LoginRoute: LoginRoute,
   MetasRoute: MetasRoute,
   TabelaDinamicaRoute: TabelaDinamicaRoute,
   WishlistRoute: WishlistRoute,

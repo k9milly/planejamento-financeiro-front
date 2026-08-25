@@ -3,20 +3,19 @@ import {
   Outlet,
   Link,
   createRootRouteWithContext,
+  useNavigate,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AccountsProvider } from "@/components/finance/accounts-context";
-import { CategoriesProvider } from "@/components/finance/categories-context";
-import { GastosFixosProvider } from "@/components/finance/gastos-fixos-context";
+import { api } from "@/lib/api-client";
+import { sessao } from "@/lib/sessao";
 import { PeriodProvider } from "@/components/finance/period-context";
-import { TransactionsProvider } from "@/components/finance/transactions-context";
-import { WishlistProvider } from "@/components/finance/wishlist-context";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -132,20 +131,57 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <PeriodProvider>
-        <AccountsProvider>
-          <CategoriesProvider>
-            <TransactionsProvider>
-              <GastosFixosProvider>
-                <WishlistProvider>
-                  {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-                  <Outlet />
-                  <Toaster />
-                </WishlistProvider>
-              </GastosFixosProvider>
-            </TransactionsProvider>
-          </CategoriesProvider>
-        </AccountsProvider>
+        <PortaoDeSessao />
+        <Toaster />
       </PeriodProvider>
     </QueryClientProvider>
   );
+}
+
+/**
+ * Checa a sessão antes de deixar qualquer rota de dado renderizar (ADR-02,
+ * ADR-03). Sem SSR de propósito — `localStorage` só existe no navegador, e
+ * um loader de servidor não teria como ler o token sem um mecanismo de
+ * propagação adicional que esta integração decidiu não introduzir. Por
+ * isso a checagem mora aqui, num `useEffect` (só roda no cliente), não num
+ * `beforeLoad`/loader de rota.
+ */
+function PortaoDeSessao() {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // null = ainda verificando o token guardado.
+  const [autenticado, setAutenticado] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    sessao.observarExpiracao(() => setAutenticado(false));
+
+    if (!sessao.ler()) {
+      setAutenticado(false);
+      return;
+    }
+    api
+      .eu()
+      .then(() => setAutenticado(true))
+      .catch(() => setAutenticado(false));
+  }, []);
+
+  useEffect(() => {
+    if (autenticado === false && pathname !== "/login") {
+      navigate({ to: "/login" });
+    }
+    if (autenticado === true && pathname === "/login") {
+      navigate({ to: "/" });
+    }
+  }, [autenticado, pathname, navigate]);
+
+  if (autenticado === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Verificando sessão…</p>
+      </div>
+    );
+  }
+
+  // Required: nested routes render here. Removing <Outlet /> breaks all child routes.
+  return <Outlet />;
 }

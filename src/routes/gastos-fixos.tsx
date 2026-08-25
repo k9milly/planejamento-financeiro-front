@@ -3,13 +3,18 @@ import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/finance/AppShell";
-import { useAccounts } from "@/components/finance/accounts-context";
-import { useCategories } from "@/components/finance/categories-context";
-import { useGastosFixos } from "@/components/finance/gastos-fixos-context";
 import { usePeriod } from "@/components/finance/period-context";
+import { useCategorias } from "@/hooks/useCategorias";
+import { useContas } from "@/hooks/useContas";
 import {
-  contaPorId,
-  categoriaPorId,
+  useAtualizarGastoFixo,
+  useCriarGastoFixo,
+  useDesfazerGastoFixo,
+  useExcluirGastoFixo,
+  useGastosFixos,
+  usePagarGastoFixo,
+} from "@/hooks/useGastosFixos";
+import {
   formatBRL,
   MONTHS,
   ROTULO_FORMA_PAGAMENTO,
@@ -61,31 +66,40 @@ type FormState = {
   ativo: boolean;
 };
 
-function GastosFixosPage() {
-  const { items, add, update, remove, marcarSituacao } = useGastosFixos();
-  const { items: accounts } = useAccounts();
-  const { items: categorias } = useCategories();
-  const { month, year } = usePeriod();
+function emptyForm(contaId: string, categoriaId: string): FormState {
+  return {
+    descricao: "",
+    valor: "",
+    diaVencimento: "10",
+    contaId,
+    categoriaId,
+    formaPagamento: "debito",
+    ativo: true,
+  };
+}
 
+function GastosFixosPage() {
+  const { month, year } = usePeriod();
   const mesAlvo = month === 0 ? new Date().getMonth() + 1 : month;
+
+  const { data: items = [], isLoading } = useGastosFixos(year);
+  const { data: accounts = [] } = useContas();
+  const { data: categorias = [] } = useCategorias();
+
+  const criar = useCriarGastoFixo(year);
+  const atualizar = useAtualizarGastoFixo(year);
+  const excluirMutacao = useExcluirGastoFixo(year);
+  const pagar = usePagarGastoFixo(year);
+  const desfazer = useDesfazerGastoFixo(year);
+
+  const contaPorId = (id: string | undefined) => accounts.find((a) => a.id === id);
+  const categoriaPorId = (id: string | undefined) => categorias.find((c) => c.id === id);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<GastoFixo | null>(null);
   const [form, setForm] = useState<FormState>(() =>
     emptyForm(accounts[0]?.id ?? "", categorias[0]?.id ?? ""),
   );
-
-  function emptyForm(contaId: string, categoriaId: string): FormState {
-    return {
-      descricao: "",
-      valor: "",
-      diaVencimento: "10",
-      contaId,
-      categoriaId,
-      formaPagamento: "debito",
-      ativo: true,
-    };
-  }
 
   function openNew() {
     setEditing(null);
@@ -122,14 +136,33 @@ function GastosFixosPage() {
       formaPagamento: form.formaPagamento,
       ativo: form.ativo,
     };
-    if (editing) {
-      update(editing.id, payload);
-      toast.success("Gasto fixo atualizado.");
-    } else {
-      add(payload);
-      toast.success("Gasto fixo criado.");
-    }
-    setOpen(false);
+    const mutacao = editing
+      ? atualizar.mutateAsync({ id: editing.id, dados: payload })
+      : criar.mutateAsync(payload);
+    mutacao
+      .then(() => {
+        toast.success(editing ? "Gasto fixo atualizado." : "Gasto fixo criado.");
+        setOpen(false);
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível salvar."));
+  }
+
+  function excluir(id: string) {
+    excluirMutacao
+      .mutateAsync(id)
+      .then(() => toast.success("Gasto fixo excluído."))
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível excluir."));
+  }
+
+  // Não é um PATCH de campo — marcar/desmarcar cria ou apaga um lançamento
+  // de verdade (ver especificação-técnica-funcional.md, seção 9).
+  function alternarPago(gasto: GastoFixo, pago: boolean) {
+    const mutacao = pago
+      ? pagar.mutateAsync({ id: gasto.id, mes: mesAlvo })
+      : desfazer.mutateAsync({ id: gasto.id, mes: mesAlvo });
+    mutacao.catch((e) =>
+      toast.error(e instanceof Error ? e.message : "Não foi possível atualizar."),
+    );
   }
 
   const totalMes = items.filter((g) => g.ativo).reduce((a, g) => a + g.valor, 0);
@@ -172,9 +205,7 @@ function GastosFixosPage() {
                   <td className="border-b border-border px-4 py-3">
                     <Checkbox
                       checked={pago}
-                      onCheckedChange={(v) =>
-                        marcarSituacao(g.id, mesAlvo, v ? "pago" : "pendente")
-                      }
+                      onCheckedChange={(v) => alternarPago(g, v === true)}
                       aria-label={`Marcar ${g.descricao} como ${pago ? "pendente" : "pago"}`}
                     />
                   </td>
@@ -208,10 +239,7 @@ function GastosFixosPage() {
                         variant="ghost"
                         size="icon"
                         aria-label="Excluir"
-                        onClick={() => {
-                          remove(g.id);
-                          toast.success("Gasto fixo excluído.");
-                        }}
+                        onClick={() => excluir(g.id)}
                       >
                         <Trash2 size={16} className="text-expense" />
                       </Button>
@@ -220,7 +248,14 @@ function GastosFixosPage() {
                 </tr>
               );
             })}
-            {items.length === 0 && (
+            {isLoading && (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                  Carregando…
+                </td>
+              </tr>
+            )}
+            {!isLoading && items.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                   Nenhum gasto fixo cadastrado.
@@ -330,7 +365,9 @@ function GastosFixosPage() {
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={save}>Salvar</Button>
+            <Button onClick={save} disabled={criar.isPending || atualizar.isPending}>
+              Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

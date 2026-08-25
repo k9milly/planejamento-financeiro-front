@@ -3,8 +3,16 @@ import { useState } from "react";
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/finance/AppShell";
-import { useWishlist } from "@/components/finance/wishlist-context";
-import { formatBRL, totalGuardadoMock, type Desejo, type Importancia } from "@/lib/finance-data";
+import { usePeriod } from "@/components/finance/period-context";
+import { useResumo } from "@/hooks/useResumo";
+import {
+  useAtualizarDesejo,
+  useCriarDesejo,
+  useExcluirDesejo,
+  useWishlist,
+  useWishlistTotal,
+} from "@/hooks/useWishlist";
+import { formatBRL, type Desejo, type Importancia } from "@/lib/finance-data";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -56,12 +64,23 @@ function emptyForm(): FormState {
 }
 
 function WishlistPage() {
-  const { items, add, update, remove } = useWishlist();
+  const { year } = usePeriod();
+  const { data: items = [], isLoading } = useWishlist(year);
+  const { data: total } = useWishlistTotal(year);
+  const { data: resumo } = useResumo(year);
+
+  const criar = useCriarDesejo(year);
+  const atualizar = useAtualizarDesejo(year);
+  const excluirMutacao = useExcluirDesejo(year);
+
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Desejo | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
 
-  const totalMarcado = items.filter((d) => d.somar && !d.comprado).reduce((a, d) => a + d.valor, 0);
+  // "Total guardado" não tem endpoint próprio — é a soma do `guardado` de
+  // cada conta corrente, que o resumo (usado no Dashboard) já traz pronta.
+  const totalGuardado = (resumo?.porConta ?? []).reduce((a, c) => a + c.guardado, 0);
+  const totalMarcado = total?.totalMarcado ?? 0;
 
   function openNew() {
     setEditing(null);
@@ -86,20 +105,40 @@ function WishlistPage() {
       toast.error("Informe o desejo e um valor válido.");
       return;
     }
-    if (editing) {
-      update(editing.id, { ...form, desejo: form.desejo.trim(), valor });
-      toast.success("Desejo atualizado.");
-    } else {
-      add({
-        desejo: form.desejo.trim(),
-        valor,
-        importancia: form.importancia,
-        somar: form.somar,
-        comprado: false,
-      });
-      toast.success("Desejo adicionado.");
-    }
-    setOpen(false);
+    const payload = {
+      desejo: form.desejo.trim(),
+      valor,
+      importancia: form.importancia,
+      somar: form.somar,
+    };
+    const mutacao = editing
+      ? atualizar.mutateAsync({ id: editing.id, dados: payload })
+      : criar.mutateAsync(payload);
+    mutacao
+      .then(() => {
+        toast.success(editing ? "Desejo atualizado." : "Desejo adicionado.");
+        setOpen(false);
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível salvar."));
+  }
+
+  function alternarSomar(desejo: Desejo, somar: boolean) {
+    atualizar
+      .mutateAsync({ id: desejo.id, dados: { somar } })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível atualizar."));
+  }
+
+  function alternarComprado(desejo: Desejo) {
+    atualizar
+      .mutateAsync({ id: desejo.id, dados: { comprado: !desejo.comprado } })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível atualizar."));
+  }
+
+  function excluir(id: string) {
+    excluirMutacao
+      .mutateAsync(id)
+      .then(() => toast.success("Desejo removido."))
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível excluir."));
   }
 
   const ordenados = [...items].sort((a, b) => {
@@ -126,7 +165,7 @@ function WishlistPage() {
           >
             <Checkbox
               checked={d.somar}
-              onCheckedChange={(v) => update(d.id, { somar: v === true })}
+              onCheckedChange={(v) => alternarSomar(d, v === true)}
               aria-label="Somar no total"
               title="Somar no total"
             />
@@ -142,7 +181,7 @@ function WishlistPage() {
                 variant="ghost"
                 size="icon"
                 aria-label={d.comprado ? "Marcar como não comprado" : "Marcar como comprado"}
-                onClick={() => update(d.id, { comprado: !d.comprado })}
+                onClick={() => alternarComprado(d)}
               >
                 <Check size={16} className={d.comprado ? "text-income" : ""} />
               </Button>
@@ -153,17 +192,15 @@ function WishlistPage() {
                 variant="ghost"
                 size="icon"
                 aria-label="Excluir"
-                onClick={() => {
-                  remove(d.id);
-                  toast.success("Desejo removido.");
-                }}
+                onClick={() => excluir(d.id)}
               >
                 <Trash2 size={16} className="text-expense" />
               </Button>
             </div>
           </div>
         ))}
-        {items.length === 0 && (
+        {isLoading && <p className="px-5 py-10 text-center text-muted-foreground">Carregando…</p>}
+        {!isLoading && items.length === 0 && (
           <p className="px-5 py-10 text-center text-muted-foreground">
             Nenhum desejo cadastrado ainda.
           </p>
@@ -178,12 +215,12 @@ function WishlistPage() {
         <div className="text-right">
           <p className="text-xs text-muted-foreground">Total guardado</p>
           <p className="text-xl font-semibold tabular-nums text-income">
-            {formatBRL(totalGuardadoMock)}
+            {formatBRL(totalGuardado)}
           </p>
         </div>
         <p className="w-full text-xs text-muted-foreground">
-          {totalMarcado > totalGuardadoMock
-            ? `Faltam ${formatBRL(totalMarcado - totalGuardadoMock)} no guardado.`
+          {totalMarcado > totalGuardado
+            ? `Faltam ${formatBRL(totalMarcado - totalGuardado)} no guardado.`
             : "Dá para comprar tudo o que está marcado com o guardado atual."}
         </p>
       </div>
@@ -237,7 +274,9 @@ function WishlistPage() {
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={save}>Salvar</Button>
+            <Button onClick={save} disabled={criar.isPending || atualizar.isPending}>
+              Salvar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
