@@ -24,6 +24,10 @@ dist-ssr
 .env
 .env.local
 
+# Lockfile do bun.lock (Lovable) é a fonte da verdade; package-lock.json só
+# aparece localmente quando se usa npm em vez de bun.
+package-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
